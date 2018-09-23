@@ -1,90 +1,47 @@
-# Script to monitor and read temperatures from Honeywell EvoHome Web API and send them to Plotly
+#!/usr/bin/env python
+
+# Script to monitor and read temperatures from Honeywell EvoHome Web API
 
 # Load required libraries
-import requests
 import json
 import datetime
 import time
-import plotly
-import plotly.plotly as py
-import plotly.tools as tls
 import ConfigParser
-from plotly.graph_objs import *
 from evohomeclient2 import EvohomeClient
+import evohomeclient
+from influx import *
 
 #config
 Config = ConfigParser.ConfigParser()
 Config.read("config.ini")
-Username = Config.get('Plotly', 'Username')
-APIkey = Config.get('Plotly', 'APIkey')
-
-# Sign in
-py.sign_in(Username, APIkey)
-
-stream_ids_array = []
-for name, value in Config.items('Rooms'):
-    stream_ids_array.append(value)
-
-# Stream tokens from plotly
-tls.set_credentials_file(stream_ids=stream_ids_array)
-stream_ids = tls.get_credentials_file()['stream_ids']
 
 # Set your login details in the 2 fields below
 USERNAME = Config.get('Evohome', 'Username')
 PASSWORD = Config.get('Evohome', 'Password')
 
-try:
-    client = EvohomeClient(USERNAME, PASSWORD)
-except ValueError:
-    try:
-        client = EvohomeClient(USERNAME, PASSWORD)
-    except ValueError:
-        print "Error when connecting to internet, please try again"
-
-# We make a plot for every room
-for device in client.temperatures():
-    stream_id = Config.get('Rooms', device['name'])
-    stream = Stream(
-        token=stream_id,
-        maxpoints=288
-    )
-    trace1 = Scatter(
-           x=[],
-           y=[],
-           mode='lines+markers',
-           line=Line(
-               shape='spline'
-               ),
-           stream = stream
-           )
-
-    data = Data([trace1])
-    layout = Layout(title=device['name'])
-    fig = Figure(data=data, layout=layout)
-    py.plot(fig, filename=device['name'], fileopt='extend')
-
-# Infinite loop every 5 minutes, send temperatures to plotly
+# Infinite loop every 5 minutes
 while True:
 
-# Get current time and then send all thermostat readings to plotly
+# Get current time and all thermostat readings
     try:
-        client = EvohomeClient(USERNAME, PASSWORD)
-        from datetime import datetime
-        j=0
+        client = evohomeclient.EvohomeClient(USERNAME, PASSWORD)
+        client2 = EvohomeClient(USERNAME, PASSWORD)
+        temps = []
+        print(client2.locations[0]._gateways[0]._control_systems[0].systemModeStatus)
+        print(client2.locations[0]._gateways[0]._control_systems[0].activeFaults)
         for device in client.temperatures():
-            stream_id = Config.get('Rooms', device['name'])
-            j+=1
-            s = py.Stream(stream_id)
-            s.open()
-            tijd = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
-            temperatuur = float(device['temp'])
-            print tijd + " : " + device['name'] + " " + str(temperatuur)
-            s.write(dict(x=tijd ,y=temperatuur))
-            s.close()
-        print "Going to sleep for 5 minutes"
-        time.sleep(300)
-    except Exception, e:
-        print "An error occured! Trying again in 15 seconds"
-        print str(e)
+            # print device
+            temperatures = Temperature(device['name'], float(device['temp']), float(device['setpoint']) )
+            print temperatures
+            temps.append(temperatures)
+        timestamp = datetime.utcnow()
+        timestamp = timestamp.replace(microsecond=0)
+        write(timestamp, temps)
+
+        print ("Sleep 5mins")
+        time.sleep(5 * 60)
+    except Exception as e:
+        print ("An error occured! Trying again in 15 seconds")
+        print (str(e))
         time.sleep(15)
-    
+
