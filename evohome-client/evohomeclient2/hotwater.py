@@ -1,40 +1,67 @@
-import requests
+"""Provide handling of the hot water zone."""
 import json
+
+import requests
 
 from .zone import ZoneBase
 
-class HotWater(ZoneBase):
 
-    def __init__(self, client, data=None):
-        super(HotWater, self).__init__()
-        self.client = client
-        self.zone_type = 'domesticHotWater'
-        if data is not None:
-            self.__dict__.update(data)
-            self.zoneId = self.dhwId
+class HotWater(ZoneBase):
+    """Provide handling of the hot water zone."""
+
+    def __init__(self, client, data):
+        """Initialise the class."""
+        super(HotWater, self).__init__(client)
+
+        self.dhwId = None  # pylint: disable=invalid-name
+
+        self.__dict__.update(data)
+
+        self.name = ""
+        self.zoneId = self.dhwId
+        self.zone_type = "domesticHotWater"
 
     def _set_dhw(self, data):
-        headers = dict(self.client.headers)
-        headers['Content-Type'] = 'application/json'
-        url = 'https://tccna.honeywell.com/WebAPI/emea/api/v1/domesticHotWater/%s/state' % self.dhwId
+        # pylint: disable=protected-access
+        headers = dict(self.client._headers())
+        headers["Content-Type"] = "application/json"
+
+        url = (
+            "https://tccna.honeywell.com/WebAPI/emea/api/v1"
+            "/domesticHotWater/%s/state" % self.dhwId
+        )
 
         response = requests.put(url, data=json.dumps(data), headers=headers)
-
+        response.raise_for_status()
 
     def set_dhw_on(self, until=None):
+        """Set the DHW on until a given time, or permanently."""
         if until is None:
-            data = {"State":1,"Mode":1,"UntilTime":None}
+            data = {"Mode": "PermanentOverride", "State": "On", "UntilTime": None}
         else:
-            data = {"State":1,"Mode":2,"UntilTime":until.strftime('%Y-%m-%dT%H:%M:%SZ')}
+            data = {
+                "Mode": "TemporaryOverride",
+                "State": "On",
+                "UntilTime": until.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            }
+
         self._set_dhw(data)
 
     def set_dhw_off(self, until=None):
+        """Set the DHW off until a given time, or permanently."""
         if until is None:
-            data = {"State":0,"Mode":1,"UntilTime":None}
+            data = {"Mode": "PermanentOverride", "State": "Off", "UntilTime": None}
         else:
-            data = {"State":0,"Mode":2,"UntilTime":until.strftime('%Y-%m-%dT%H:%M:%SZ')}
+            data = {
+                "Mode": "TemporaryOverride",
+                "State": "Off",
+                "UntilTime": until.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            }
+
         self._set_dhw(data)
 
     def set_dhw_auto(self):
-        data =  {"State":0,"Mode":0,"UntilTime":None}
+        """Set the DHW to follow the schedule."""
+        data = {"Mode": "FollowSchedule", "State": "", "UntilTime": None}
+
         self._set_dhw(data)
